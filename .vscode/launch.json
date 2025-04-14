@@ -1,0 +1,56 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Flutter (web)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--web-port",
+                "8080"
+            ],
+            "flutterMode": "debug"
+        },
+        {
+            "name": "Flutter (web, profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--web-port",
+                "8080"
+            ],
+            "flutterMode": "profile"
+        },
+        {
+            "name": "Flutter (web, release mode)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--web-port",
+                "8080"
+            ],
+            "flutterMode": "release"
+        },
+        {
+            "name": "private_routes",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "debug"
+        },
+        {
+            "name": "private_routes (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "private_routes (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}
