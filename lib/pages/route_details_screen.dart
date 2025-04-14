@@ -165,10 +165,11 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     final startPoint = widget.route.points.first;
     final endPoint = widget.route.points.last;
 
-    // Create a Google Maps URL for directions
+    // Create a Google Maps URL for directions with walking mode
     final url = 'https://www.google.com/maps/dir/?api=1'
         '&origin=${startPoint.latitude},${startPoint.longitude}'
-        '&destination=${endPoint.latitude},${endPoint.longitude}';
+        '&destination=${endPoint.latitude},${endPoint.longitude}'
+        '&travelmode=walking';
 
     // Add waypoints if there are intermediate points
     if (widget.route.points.length > 2) {

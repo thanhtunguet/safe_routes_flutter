@@ -35,9 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _routes = routes;
       });
     } catch (e) {
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   SnackBar(content: Text('Error loading routes: ${e.toString()}')),
-      // );
       _showSnackBar('Error loading routes: ${e.toString()}');
     } finally {
       setState(() {
@@ -52,25 +49,73 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showQrCodeModal(model.Route route) {
+  // Show confirmation dialog before deleting a route
+  Future<void> _confirmDeleteRoute(model.Route route) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Route?'),
+        content: Text(
+            'Are you sure you want to delete "${route.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteRoute(route);
+    }
+  }
+
+  // Delete a route and refresh the list
+  Future<void> _deleteRoute(model.Route route) async {
+    try {
+      await RouteService.deleteRoute(route.name);
+      _showSnackBar('Route "${route.name}" deleted');
+      await _loadRoutes();
+    } catch (e) {
+      _showSnackBar('Error deleting route: ${e.toString()}');
+    }
+  }
+
+  void _showQrCodeModal(model.Route route) async {
     // Convert route to JSON and encode as string
     final routeJson = jsonEncode(route.toJson());
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Share "${route.name}"'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            QrImageView(
-              data: routeJson,
-              version: QrVersions.auto,
-              size: 200.0,
-            ),
-            const SizedBox(height: 16),
-            const Text('Scan this QR code to share the route'),
-          ],
+        content: SizedBox(
+          width: 300,
+          height: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              QrImageView(
+                data: routeJson,
+                version: QrVersions.auto,
+                size: 240.0,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Scan this QR code to share the route',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -100,11 +145,20 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (route.isFavorite == true)
-              const Icon(Icons.favorite, color: Colors.red),
+              const Icon(
+                Icons.favorite,
+                color: Colors.red,
+              ),
             IconButton(
               icon: const Icon(Icons.qr_code),
               onPressed: () => _showQrCodeModal(route),
               tooltip: 'Share via QR Code',
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _confirmDeleteRoute(route),
+              tooltip: 'Delete Route',
+              color: Colors.red.shade300,
             ),
           ],
         ),
