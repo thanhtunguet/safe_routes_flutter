@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:saferoute/pages/home_screen.dart';
+import 'package:saferoute/providers/providers.dart';
 import 'package:saferoute/services/route_service.dart';
 
 void main() async {
@@ -9,10 +11,16 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
 
+  // Initialize route service
   await RouteService.init();
 
+  // Initialize providers
+  await initializeProviders();
+
   runApp(
-    const SafeRouteApp(),
+    const ProviderScope(
+      child: SafeRouteApp(),
+    ),
   );
 }
 
@@ -21,9 +29,15 @@ class SafeRouteApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       title: 'SafeRoute',
-      home: HomeScreen(),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const HomeScreen(),
+      // No need for special builder for toastification v1.0.0
+      // Toastification will be handled by the provider directly
     );
   }
 }

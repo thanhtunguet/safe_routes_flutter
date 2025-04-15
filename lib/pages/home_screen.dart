@@ -1,56 +1,20 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saferoute/models/route.dart' as model;
 import 'package:saferoute/pages/create_route_screen.dart';
 import 'package:saferoute/pages/route_details_screen.dart';
-import 'package:saferoute/services/route_service.dart';
+import 'package:saferoute/providers/route_provider.dart';
+import 'package:saferoute/providers/toast_provider.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  List<model.Route> _routes = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRoutes();
-  }
-
-  Future<void> _loadRoutes() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final routes = await RouteService.getAllRoutes();
-      setState(() {
-        _routes = routes;
-      });
-    } catch (e) {
-      _showSnackBar('Error loading routes: ${e.toString()}');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
   // Show confirmation dialog before deleting a route
-  Future<void> _confirmDeleteRoute(model.Route route) async {
+  Future<void> _confirmDeleteRoute(
+      BuildContext context, WidgetRef ref, model.Route route) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -74,22 +38,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirmed == true) {
-      await _deleteRoute(route);
+      await _deleteRoute(context, ref, route);
     }
   }
 
   // Delete a route and refresh the list
-  Future<void> _deleteRoute(model.Route route) async {
+  Future<void> _deleteRoute(
+      BuildContext context, WidgetRef ref, model.Route route) async {
     try {
-      await RouteService.deleteRoute(route.name);
-      _showSnackBar('Route "${route.name}" deleted');
-      await _loadRoutes();
+      await ref.read(routeProvider.notifier).deleteRoute(route.name);
+      ref
+          .read(toastProvider.notifier)
+          .showSuccess(context, 'Route "${route.name}" deleted');
     } catch (e) {
-      _showSnackBar('Error deleting route: ${e.toString()}');
+      ref
+          .read(toastProvider.notifier)
+          .showError(context, 'Error deleting route: ${e.toString()}');
     }
   }
 
-  void _showQrCodeModal(model.Route route) async {
+  void _showQrCodeModal(BuildContext context, model.Route route) async {
     // Convert route to JSON and encode as string
     final routeJson = jsonEncode(route.toJson());
 
@@ -97,9 +65,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Share "${route.name}"'),
-        content: SizedBox(
-          width: 300,
+        content: Container(
+          width: 280,
           height: 300,
+          decoration: const BoxDecoration(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -127,7 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRouteItem(model.Route route) {
+  Widget _buildRouteItem(
+      BuildContext context, WidgetRef ref, model.Route route) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: ListTile(
@@ -151,12 +121,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             IconButton(
               icon: const Icon(Icons.qr_code),
-              onPressed: () => _showQrCodeModal(route),
+              onPressed: () => _showQrCodeModal(context, route),
               tooltip: 'Share via QR Code',
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              onPressed: () => _confirmDeleteRoute(route),
+              onPressed: () => _confirmDeleteRoute(context, ref, route),
               tooltip: 'Delete Route',
               color: Colors.red.shade300,
             ),
@@ -169,58 +139,72 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context) => RouteDetailsScreen(route: route),
                 ),
               )
-              .then((_) => _loadRoutes());
+              .then((_) => ref.invalidate(routeProvider));
         },
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final routesAsync = ref.watch(routeProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Your Safe Routes'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadRoutes,
+            onPressed: () => ref.refresh(routeProvider),
             tooltip: 'Refresh Routes',
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _routes.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'No routes yet',
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context)
-                              .push(
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const CreateRouteScreen(),
-                                ),
-                              )
-                              .then((_) => _loadRoutes());
-                        },
-                        child: const Text('Create a new route'),
-                      ),
-                    ],
+      body: routesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref
+                .read(toastProvider.notifier)
+                .showError(context, 'Error loading routes: $error');
+          });
+          return const Center(child: Text('Failed to load routes'));
+        },
+        data: (routes) {
+          if (routes.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'No routes yet',
+                    style: TextStyle(fontSize: 18),
                   ),
-                )
-              : ListView.builder(
-                  itemCount: _routes.length,
-                  itemBuilder: (context, index) =>
-                      _buildRouteItem(_routes[index]),
-                ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (context) => const CreateRouteScreen(),
+                            ),
+                          )
+                          .then((_) => ref.refresh(routeProvider));
+                    },
+                    child: const Text('Create a new route'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: routes.length,
+            itemBuilder: (context, index) =>
+                _buildRouteItem(context, ref, routes[index]),
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.of(context)
@@ -229,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context) => const CreateRouteScreen(),
                 ),
               )
-              .then((_) => _loadRoutes());
+              .then((_) => ref.refresh(routeProvider));
         },
         child: const Icon(Icons.add),
       ),
