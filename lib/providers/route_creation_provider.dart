@@ -1,3 +1,4 @@
+import 'package:apple_maps_flutter/apple_maps_flutter.dart' as apple_maps;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -61,6 +62,7 @@ class RouteCreationNotifier extends StateNotifier<RouteCreationState> {
   final Ref ref;
   int _markerIdCounter = 0;
   GoogleMapController? _mapController;
+  apple_maps.AppleMapController? _appleMapController;
 
   RouteCreationNotifier(this.ref) : super(RouteCreationState()) {
     _checkOrRequestLocationPermission();
@@ -92,9 +94,17 @@ class RouteCreationNotifier extends StateNotifier<RouteCreationState> {
     }
   }
 
-  // Set map controller
+  // Set Google map controller
   void setMapController(GoogleMapController controller) {
     _mapController = controller;
+    if (state.selectedPoints.length > 1) {
+      _updatePolylines();
+    }
+  }
+
+  // Set Apple map controller
+  void setAppleMapController(apple_maps.AppleMapController controller) {
+    _appleMapController = controller;
     if (state.selectedPoints.length > 1) {
       _updatePolylines();
     }
@@ -254,14 +264,15 @@ class RouteCreationNotifier extends StateNotifier<RouteCreationState> {
     }
 
     // Center map on the route if map controller is available
-    if (_mapController != null && newSelectedPoints.isNotEmpty) {
+    if ((state.selectedPoints.isNotEmpty) &&
+        (_mapController != null || _appleMapController != null)) {
       _fitMapToRoute();
     }
   }
 
   // Fit map to show all points
   void _fitMapToRoute() {
-    if (_mapController == null || state.selectedPoints.isEmpty) return;
+    if (state.selectedPoints.isEmpty) return;
 
     // Calculate bounds
     double minLat = state.selectedPoints.first.latitude;
@@ -282,9 +293,20 @@ class RouteCreationNotifier extends StateNotifier<RouteCreationState> {
       northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
     );
 
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 50),
-    );
+    if (_mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50),
+      );
+    } else if (_appleMapController != null) {
+      final appleBounds = apple_maps.LatLngBounds(
+        southwest: apple_maps.LatLng(minLat - 0.01, minLng - 0.01),
+        northeast: apple_maps.LatLng(maxLat + 0.01, maxLng + 0.01),
+      );
+
+      _appleMapController!.animateCamera(
+        apple_maps.CameraUpdate.newLatLngBounds(appleBounds, 50),
+      );
+    }
   }
 
   // Convert Google Maps LatLng to our model Point

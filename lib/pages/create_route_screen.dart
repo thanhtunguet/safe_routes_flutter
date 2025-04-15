@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:apple_maps_flutter/apple_maps_flutter.dart' as apple_maps;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:saferoute/models/route.dart' as model;
+import 'package:saferoute/pages/qr_scanner_screen.dart';
 import 'package:saferoute/providers/route_creation_provider.dart';
 import 'package:saferoute/providers/toast_provider.dart';
 
@@ -51,6 +52,9 @@ class CreateRouteScreen extends ConsumerWidget {
 
       final success =
           await ref.read(routeCreationProvider.notifier).saveRoute();
+
+      if (!context.mounted) return;
+
       if (success) {
         ref
             .read(toastProvider.notifier)
@@ -70,6 +74,8 @@ class CreateRouteScreen extends ConsumerWidget {
           builder: (context) => const QRScannerScreen(),
         ),
       );
+
+      if (!context.mounted) return;
 
       if (result != null) {
         try {
@@ -114,34 +120,9 @@ class CreateRouteScreen extends ConsumerWidget {
             Expanded(
               child: Stack(
                 children: [
-                  GoogleMap(
-                    myLocationEnabled: true,
-                    myLocationButtonEnabled: true,
-                    compassEnabled: true,
-                    mapType: MapType.normal,
-                    zoomControlsEnabled: true,
-                    zoomGesturesEnabled: true,
-                    markers: state.markers,
-                    polylines: state.polylines,
-                    onMapCreated: (controller) {
-                      ref
-                          .read(routeCreationProvider.notifier)
-                          .setMapController(controller);
-                    },
-                    onTap: (latLng) {
-                      ref.read(routeCreationProvider.notifier).addPoint(latLng);
-                    },
-                    initialCameraPosition: (state.hasPermissionReady &&
-                            state.currentLocation != null)
-                        ? CameraPosition(
-                            target: state.currentLocation!,
-                            zoom: 14.0,
-                          )
-                        : const CameraPosition(
-                            target: LatLng(20.9834277, 105.8187993),
-                            zoom: 2.0,
-                          ),
-                  ),
+                  Platform.isIOS
+                      ? _buildAppleMap(state, ref)
+                      : _buildGoogleMap(state, ref),
                   Positioned(
                     top: 10,
                     left: 10,
@@ -226,82 +207,97 @@ class CreateRouteScreen extends ConsumerWidget {
       ),
     );
   }
-}
 
-// QR Scanner Screen
-class QRScannerScreen extends ConsumerStatefulWidget {
-  const QRScannerScreen({super.key});
-
-  @override
-  ConsumerState<QRScannerScreen> createState() => _QRScannerScreenState();
-}
-
-class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  QRViewController? controller;
-  bool _hasScanned = false;
-
-  // In order to get hot reload working, we need to pause the camera if the platform
-  // is android, or resume the camera if the platform is iOS.
-  @override
-  void reassemble() {
-    super.reassemble();
-    if (Platform.isAndroid) {
-      controller?.pauseCamera();
-    } else if (Platform.isIOS) {
-      controller?.resumeCamera();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan Route QR Code'),
-      ),
-      body: Column(
-        children: <Widget>[
-          Expanded(
-            flex: 5,
-            child: QRView(
-              key: qrKey,
-              onQRViewCreated: _onQRViewCreated,
-              overlay: QrScannerOverlayShape(
-                borderColor: Theme.of(context).primaryColor,
-                borderRadius: 10,
-                borderLength: 30,
-                borderWidth: 10,
-                cutOutSize: 300,
-              ),
-            ),
-          ),
-          const Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                'Scan a QR code to import a route',
-                style: TextStyle(fontSize: 16),
-              ),
-            ),
-          )
-        ],
-      ),
+  Widget _buildGoogleMap(dynamic state, WidgetRef ref) {
+    return GoogleMap(
+      myLocationEnabled: true,
+      myLocationButtonEnabled: true,
+      compassEnabled: true,
+      mapType: MapType.normal,
+      zoomControlsEnabled: true,
+      zoomGesturesEnabled: true,
+      markers: state.markers,
+      polylines: state.polylines,
+      onMapCreated: (controller) {
+        ref.read(routeCreationProvider.notifier).setMapController(controller);
+      },
+      onTap: (latLng) {
+        ref.read(routeCreationProvider.notifier).addPoint(latLng);
+      },
+      initialCameraPosition:
+          (state.hasPermissionReady && state.currentLocation != null)
+              ? CameraPosition(
+                  target: state.currentLocation!,
+                  zoom: 14.0,
+                )
+              : const CameraPosition(
+                  target: LatLng(20.9834277, 105.8187993),
+                  zoom: 2.0,
+                ),
     );
   }
 
-  void _onQRViewCreated(QRViewController controller) {
-    this.controller = controller;
-    controller.scannedDataStream.listen((scanData) {
-      if (!_hasScanned) {
-        _hasScanned = true;
-        Navigator.pop(context, scanData.code);
-      }
-    });
-  }
+  Widget _buildAppleMap(dynamic state, WidgetRef ref) {
+    // Convert Google markers to Apple markers
+    final appleMarkers = <String, apple_maps.Annotation>{};
+    for (final marker in state.markers) {
+      final appleMarkerId = marker.markerId.value;
+      appleMarkers[appleMarkerId] = apple_maps.Annotation(
+        annotationId: apple_maps.AnnotationId(appleMarkerId),
+        position: apple_maps.LatLng(
+          marker.position.latitude,
+          marker.position.longitude,
+        ),
+      );
+    }
 
-  @override
-  void dispose() {
-    controller?.dispose();
-    super.dispose();
+    // Convert Google polylines to Apple polylines
+    final applePolylines = <String, apple_maps.Polyline>{};
+    for (final polyline in state.polylines) {
+      final applePolylineId = polyline.polylineId.value;
+      final points = polyline.points
+          .map((p) => apple_maps.LatLng(p.latitude, p.longitude))
+          .toList();
+
+      applePolylines[applePolylineId] = apple_maps.Polyline(
+        polylineId: apple_maps.PolylineId(applePolylineId),
+        points: points,
+        width: polyline.width,
+        color: polyline.color,
+      );
+    }
+
+    return apple_maps.AppleMap(
+      mapType: apple_maps.MapType.standard,
+      rotateGesturesEnabled: true,
+      myLocationButtonEnabled: true,
+      myLocationEnabled: true,
+      scrollGesturesEnabled: true,
+      zoomGesturesEnabled: true,
+      annotations: Set<apple_maps.Annotation>.of(appleMarkers.values),
+      polylines: Set<apple_maps.Polyline>.of(applePolylines.values),
+      onMapCreated: (controller) {
+        ref
+            .read(routeCreationProvider.notifier)
+            .setAppleMapController(controller);
+      },
+      onTap: (point) {
+        final latLng = LatLng(point.latitude, point.longitude);
+        ref.read(routeCreationProvider.notifier).addPoint(latLng);
+      },
+      initialCameraPosition:
+          (state.hasPermissionReady && state.currentLocation != null)
+              ? apple_maps.CameraPosition(
+                  target: apple_maps.LatLng(
+                    state.currentLocation!.latitude,
+                    state.currentLocation!.longitude,
+                  ),
+                  zoom: 14.0,
+                )
+              : const apple_maps.CameraPosition(
+                  target: apple_maps.LatLng(20.9834277, 105.8187993),
+                  zoom: 2.0,
+                ),
+    );
   }
 }
