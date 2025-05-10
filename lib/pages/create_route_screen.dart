@@ -95,6 +95,7 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
   // Save route function
   Future<void> saveRoute() async {
     if (nameController.text.trim().isEmpty) {
+      if (!mounted) return;
       ref
           .read(toastProvider.notifier)
           .showError(context, 'Route name is required');
@@ -102,6 +103,7 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
     }
 
     if (ref.read(routeCreationProvider).selectedPoints.length < 2) {
+      if (!mounted) return;
       ref
           .read(toastProvider.notifier)
           .showError(context, 'At least 2 points are required for a route');
@@ -110,7 +112,7 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
 
     final success = await ref.read(routeCreationProvider.notifier).saveRoute();
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (success) {
       ref
@@ -130,7 +132,7 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
       ),
     );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (result != null) {
       try {
@@ -157,6 +159,7 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
             .read(toastProvider.notifier)
             .showSuccess(context, 'Route imported successfully!');
       } catch (e) {
+        if (!mounted) return;
         ref
             .read(toastProvider.notifier)
             .showError(context, 'Error importing route: ${e.toString()}');
