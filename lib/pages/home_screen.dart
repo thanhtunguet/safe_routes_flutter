@@ -38,7 +38,9 @@ class HomeScreen extends ConsumerWidget {
     );
 
     if (confirmed == true) {
-      await _deleteRoute(context, ref, route);
+      if (context.mounted) {
+        await _deleteRoute(context, ref, route);
+      }
     }
   }
 
@@ -47,13 +49,17 @@ class HomeScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, model.Route route) async {
     try {
       await ref.read(routeProvider.notifier).deleteRoute(route.name);
-      ref
-          .read(toastProvider.notifier)
-          .showSuccess(context, 'Route "${route.name}" deleted');
+      if (context.mounted) {
+        ref
+            .read(toastProvider.notifier)
+            .showSuccess(context, 'Route "${route.name}" deleted');
+      }
     } catch (e) {
-      ref
-          .read(toastProvider.notifier)
-          .showError(context, 'Error deleting route: ${e.toString()}');
+      if (context.mounted) {
+        ref
+            .read(toastProvider.notifier)
+            .showError(context, 'Error deleting route: ${e.toString()}');
+      }
     }
   }
 

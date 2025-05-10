@@ -10,16 +10,25 @@ import 'package:saferoute/pages/qr_scanner_screen.dart';
 import 'package:saferoute/providers/route_creation_provider.dart';
 import 'package:saferoute/providers/toast_provider.dart';
 
-class CreateRouteScreen extends ConsumerWidget {
+class CreateRouteScreen extends ConsumerStatefulWidget {
   const CreateRouteScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the state
-    final state = ref.watch(routeCreationProvider);
-    final nameController = TextEditingController(text: state.name);
-    final descriptionController =
-        TextEditingController(text: state.description);
+  ConsumerState<CreateRouteScreen> createState() => _CreateRouteScreenState();
+}
+
+class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
+  late TextEditingController nameController;
+  late TextEditingController descriptionController;
+  GoogleMapController? _mapController;
+  apple_maps.AppleMapController? _appleMapController;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = ref.read(routeCreationProvider);
+    nameController = TextEditingController(text: state.name);
+    descriptionController = TextEditingController(text: state.description);
 
     // Add listeners to update state when text changes
     nameController.addListener(() {
@@ -33,75 +42,132 @@ class CreateRouteScreen extends ConsumerWidget {
           .read(routeCreationProvider.notifier)
           .setRouteData(description: descriptionController.text);
     });
+  }
 
-    // Save route function
-    Future<void> saveRoute() async {
-      if (nameController.text.trim().isEmpty) {
-        ref
-            .read(toastProvider.notifier)
-            .showError(context, 'Route name is required');
-        return;
-      }
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    _appleMapController = null;
+    nameController.dispose();
+    descriptionController.dispose();
+    super.dispose();
+  }
 
-      if (state.selectedPoints.length < 2) {
-        ref
-            .read(toastProvider.notifier)
-            .showError(context, 'At least 2 points are required for a route');
-        return;
-      }
+  // Fit map to show all points
+  void _fitMapToRoute(List<LatLng> points) {
+    if (points.isEmpty) return;
 
-      final success =
-          await ref.read(routeCreationProvider.notifier).saveRoute();
+    // Calculate bounds
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
 
-      if (!context.mounted) return;
-
-      if (success) {
-        ref
-            .read(toastProvider.notifier)
-            .showSuccess(context, 'Route saved successfully!');
-        Navigator.pop(context, true);
-      } else {
-        ref
-            .read(toastProvider.notifier)
-            .showError(context, 'Error saving route');
-      }
+    for (var point in points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
     }
 
-    // Import route from QR code
-    void importFromQrCode() async {
-      final result = await Navigator.of(context).push<String>(
-        MaterialPageRoute(
-          builder: (context) => const QRScannerScreen(),
-        ),
+    // Add padding
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat - 0.01, minLng - 0.01),
+      northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
+    );
+
+    if (_mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50),
+      );
+    } else if (_appleMapController != null) {
+      final appleBounds = apple_maps.LatLngBounds(
+        southwest: apple_maps.LatLng(minLat - 0.01, minLng - 0.01),
+        northeast: apple_maps.LatLng(maxLat + 0.01, maxLng + 0.01),
       );
 
-      if (!context.mounted) return;
+      _appleMapController!.animateCamera(
+        apple_maps.CameraUpdate.newLatLngBounds(appleBounds, 50),
+      );
+    }
+  }
 
-      if (result != null) {
-        try {
-          // Parse the JSON data from QR code
-          final jsonData = jsonDecode(result);
-          final importedRoute = model.Route.fromJson(jsonData);
+  // Save route function
+  Future<void> saveRoute() async {
+    if (nameController.text.trim().isEmpty) {
+      ref
+          .read(toastProvider.notifier)
+          .showError(context, 'Route name is required');
+      return;
+    }
 
-          // Update state with imported route
-          ref
-              .read(routeCreationProvider.notifier)
-              .importRouteFromQrData(result, importedRoute);
+    if (ref.read(routeCreationProvider).selectedPoints.length < 2) {
+      ref
+          .read(toastProvider.notifier)
+          .showError(context, 'At least 2 points are required for a route');
+      return;
+    }
 
-          // Update controller values
-          nameController.text = "${importedRoute.name} (Copy)";
-          descriptionController.text = importedRoute.description ?? '';
+    final success = await ref.read(routeCreationProvider.notifier).saveRoute();
 
-          ref
-              .read(toastProvider.notifier)
-              .showSuccess(context, 'Route imported successfully!');
-        } catch (e) {
-          ref
-              .read(toastProvider.notifier)
-              .showError(context, 'Error importing route: ${e.toString()}');
-        }
+    if (!context.mounted) return;
+
+    if (success) {
+      ref
+          .read(toastProvider.notifier)
+          .showSuccess(context, 'Route saved successfully!');
+      Navigator.pop(context, true);
+    } else {
+      ref.read(toastProvider.notifier).showError(context, 'Error saving route');
+    }
+  }
+
+  // Import route from QR code
+  void importFromQrCode() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => const QRScannerScreen(),
+      ),
+    );
+
+    if (!context.mounted) return;
+
+    if (result != null) {
+      try {
+        // Parse the JSON data from QR code
+        final jsonData = jsonDecode(result);
+        final importedRoute = model.Route.fromJson(jsonData);
+
+        // Update state with imported route
+        ref
+            .read(routeCreationProvider.notifier)
+            .importRouteFromQrData(result, importedRoute);
+
+        // Update controller values
+        nameController.text = "${importedRoute.name} (Copy)";
+        descriptionController.text = importedRoute.description ?? '';
+
+        // Fit map to show imported route
+        final points = importedRoute.points
+            .map((p) => LatLng(p.latitude, p.longitude))
+            .toList();
+        _fitMapToRoute(points);
+
+        ref
+            .read(toastProvider.notifier)
+            .showSuccess(context, 'Route imported successfully!');
+      } catch (e) {
+        ref
+            .read(toastProvider.notifier)
+            .showError(context, 'Error importing route: ${e.toString()}');
       }
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch the state
+    final state = ref.watch(routeCreationProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -219,10 +285,18 @@ class CreateRouteScreen extends ConsumerWidget {
       markers: state.markers,
       polylines: state.polylines,
       onMapCreated: (controller) {
-        ref.read(routeCreationProvider.notifier).setMapController(controller);
+        setState(() {
+          _mapController = controller;
+        });
+        if (state.selectedPoints.length > 1) {
+          _fitMapToRoute(state.selectedPoints);
+        }
       },
       onTap: (latLng) {
         ref.read(routeCreationProvider.notifier).addPoint(latLng);
+        if (state.selectedPoints.length > 1) {
+          _fitMapToRoute(state.selectedPoints);
+        }
       },
       initialCameraPosition:
           (state.hasPermissionReady && state.currentLocation != null)
@@ -277,13 +351,19 @@ class CreateRouteScreen extends ConsumerWidget {
       annotations: Set<apple_maps.Annotation>.of(appleMarkers.values),
       polylines: Set<apple_maps.Polyline>.of(applePolylines.values),
       onMapCreated: (controller) {
-        ref
-            .read(routeCreationProvider.notifier)
-            .setAppleMapController(controller);
+        setState(() {
+          _appleMapController = controller;
+        });
+        if (state.selectedPoints.length > 1) {
+          _fitMapToRoute(state.selectedPoints);
+        }
       },
       onTap: (point) {
         final latLng = LatLng(point.latitude, point.longitude);
         ref.read(routeCreationProvider.notifier).addPoint(latLng);
+        if (state.selectedPoints.length > 1) {
+          _fitMapToRoute(state.selectedPoints);
+        }
       },
       initialCameraPosition:
           (state.hasPermissionReady && state.currentLocation != null)
@@ -292,11 +372,11 @@ class CreateRouteScreen extends ConsumerWidget {
                     state.currentLocation!.latitude,
                     state.currentLocation!.longitude,
                   ),
-                  zoom: 14.0,
+                  zoom: 16.0,
                 )
               : const apple_maps.CameraPosition(
                   target: apple_maps.LatLng(20.9834277, 105.8187993),
-                  zoom: 2.0,
+                  zoom: 16.0,
                 ),
     );
   }

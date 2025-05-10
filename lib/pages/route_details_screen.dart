@@ -206,15 +206,19 @@ class _RouteDetailsScreenState extends ConsumerState<RouteDetailsScreen> {
           .read(mapStateProvider(widget.route).notifier)
           .updateFavoriteStatus(newIsFavorite);
 
-      ref.read(toastProvider.notifier).showSuccess(
-            context,
-            newIsFavorite ? 'Added to favorites' : 'Removed from favorites',
-          );
+      if (mounted) {
+        ref.read(toastProvider.notifier).showSuccess(
+              context,
+              newIsFavorite ? 'Added to favorites' : 'Removed from favorites',
+            );
+      }
     } catch (e) {
-      ref.read(toastProvider.notifier).showError(
-            context,
-            'Error updating favorite status: ${e.toString()}',
-          );
+      if (mounted) {
+        ref.read(toastProvider.notifier).showError(
+              context,
+              'Error updating favorite status: ${e.toString()}',
+            );
+      }
     }
   }
 
@@ -328,9 +332,11 @@ class _RouteDetailsScreenState extends ConsumerState<RouteDetailsScreen> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      ref
-          .read(toastProvider.notifier)
-          .showError(context, 'Could not launch maps application');
+      if (mounted) {
+        ref
+            .read(toastProvider.notifier)
+            .showError(context, 'Could not launch maps application');
+      }
     }
   }
 
@@ -446,8 +452,11 @@ class _RouteDetailsScreenState extends ConsumerState<RouteDetailsScreen> {
       zoomControlsEnabled: true,
       onMapCreated: (controller) {
         _googleMapController = controller;
-        ref.read(mapStateProvider(widget.route).notifier).googleMapController =
-            controller;
+        if (mounted) {
+          ref
+              .read(mapStateProvider(widget.route).notifier)
+              .googleMapController = controller;
+        }
         // Fit map to show all points
         Future.delayed(const Duration(milliseconds: 300), _fitMapToRoute);
       },
