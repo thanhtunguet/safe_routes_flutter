@@ -7,16 +7,18 @@ plugins {
 
 android {
     namespace = "vn.thanhtunguet.info.private_routes"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 35
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17 // Set to 1.8 or higher
+        targetCompatibility = JavaVersion.VERSION_17 // Set to 1.8 or higher
+        // Add core library desugaring
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = JavaVersion.VERSION_17 // Set to 1.8 or higher
     }
 
     defaultConfig {
@@ -41,4 +43,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Add the core library desugaring dependency
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4") // Use the latest version
 }
